@@ -4,6 +4,8 @@
   "description": "Secure Discussion Group",
   "main": "server.js",
   "scripts": {
+    "dev": "nodemon server.js",
+    "start": "npm run start",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Vanaj Moorthy",
@@ -15,5 +17,8 @@
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   }
 }
