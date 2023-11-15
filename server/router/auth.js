@@ -23,6 +23,7 @@ router.post('/register', async (req, res) => {
         await user.save();
         res.status(201).send({ message: "User created successfully" });
     } catch (error) {
+        console.error(error)
         res.status(500).send(error);
     }
 });
@@ -34,7 +35,7 @@ router.post('/login', async (req, res) => {
         const user = await User.findOne({ username: req.body.username });
         if (user && await bcrypt.compare(req.body.password, user.password)) {
             const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-            res.status(200).json({ token });
+            res.status(200).json({ token: token, username: user.username });
         } else {
             res.status(400).send({ message: "Invalid creds" });
         }

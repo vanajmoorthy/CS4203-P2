@@ -23,6 +23,8 @@ const Login = ({ onLogin }) => {
             if (response.ok && data.token) {
                 console.log('Login Success:', data);
                 localStorage.setItem('userToken', data.token);
+                localStorage.setItem('userName', data.username);
+
                 if (onLogin) {
                     onLogin(username, password);
                 }

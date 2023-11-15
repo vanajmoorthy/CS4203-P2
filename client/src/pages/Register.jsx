@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { storePrivateKey } from "../cryptoUtils"
 
 const Register = ({ onRegister }) => {
     const [username, setUsername] = useState('');
@@ -7,8 +8,6 @@ const Register = ({ onRegister }) => {
     const [publicKey, setPublicKey] = useState('');
     const baseUrl = "http://localhost:3000";
 
-    const dbName = "cryptoKeys";
-    const storeName = "keys";
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -41,64 +40,7 @@ const Register = ({ onRegister }) => {
         // Store the private key securely
         await storePrivateKey(keyPair.privateKey);
     };
-    const openDB = () => {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(dbName, 1);
 
-            request.onerror = (event) => {
-                reject("Database error: " + event.target.errorCode);
-            };
-
-            request.onsuccess = (event) => {
-                resolve(event.target.result);
-            };
-
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                db.createObjectStore(storeName, { keyPath: "id" });
-            };
-        });
-    }
-
-    const storePrivateKey = async (privateKey) => {
-        const db = await openDB();
-        const transaction = db.transaction(storeName, "readwrite");
-        const store = transaction.objectStore(storeName);
-
-        return new Promise((resolve, reject) => {
-            const request = store.put({ id: "userPrivateKey", key: privateKey });
-
-            request.onsuccess = () => {
-                resolve();
-            };
-
-            request.onerror = (event) => {
-                reject("Error writing data: " + event.target.errorCode);
-            };
-        });
-    }
-
-    async function getPrivateKey() {
-        const db = await openDB();
-        const transaction = db.transaction(storeName, "readonly");
-        const store = transaction.objectStore(storeName);
-
-        return new Promise((resolve, reject) => {
-            const request = store.get("userPrivateKey");
-
-            request.onsuccess = (event) => {
-                if (event.target.result) {
-                    resolve(event.target.result.key);
-                } else {
-                    reject("No key found");
-                }
-            };
-
-            request.onerror = (event) => {
-                reject("Error reading data: " + event.target.errorCode);
-            };
-        });
-    }
 
     const handleRegister = async () => {
         try {
