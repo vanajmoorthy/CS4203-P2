@@ -11,7 +11,8 @@ const GroupSchema = new mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User'
         },
-        encryptedGroupKey: String // Encrypted group key for each member
+        encryptedGroupKey: String, // Encrypted group key for each member
+        username: String // Username of each member
     }]
 });
 

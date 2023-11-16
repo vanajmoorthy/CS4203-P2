@@ -3,6 +3,7 @@ const router = express.Router();
 const { generateGroupKey, encryptKey } = require('../utils/crypto');
 const User = require('../models/User');
 const Group = require('../models/Group');
+const Message = require('../models/Message');
 const jwt = require('jsonwebtoken');
 
 
@@ -38,7 +39,8 @@ router.post('/createGroup', async (req, res) => {
             admin: userId,
             members: [{
                 userId: userId,
-                encryptedGroupKey: encryptedGroupKey
+                encryptedGroupKey: encryptedGroupKey,
+                username: user.username
             }]
         });
 
@@ -58,14 +60,27 @@ router.post('/addGroupMember', authenticate, async (req, res) => {
             return res.status(404).json({ message: 'Group not found' });
         }
 
-        // Add the new user with the encrypted group key
+        // Check if the user is already a member of the group
+        const isAlreadyMember = group.members.some(member => member.userId.toString() === newUserId);
+        if (isAlreadyMember) {
+            return res.status(409).json({ message: 'User is already a member of the group' });
+        }
+
+        // Fetch the username of the new user
+        const newUser = await User.findById(newUserId);
+        if (!newUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Add the new user with the encrypted group key and username
         group.members.push({
             userId: newUserId,
-            encryptedGroupKey: encryptedGroupKey
+            encryptedGroupKey: encryptedGroupKey,
+            username: newUser.username
         });
 
         await group.save();
-        res.status(200).json({ message: 'User added to group successfully' });
+        res.status(200).json({ message: `User added to group successfully: ${newUser.username}` });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -125,20 +140,58 @@ router.get('/groupKey/:groupId', authenticate, async (req, res) => {
 });
 
 
-router.post('/sendMessage', async (req, res) => {
+router.post('/sendMessage', authenticate, async (req, res) => {
     try {
         const { content, senderId, groupId } = req.body;
-        const newMessage = new Message({
-            content, // Already encrypted by the client
-            sender: senderId,
-            group: groupId
-        });
+        const newMessage = new Message({ content, sender: senderId, group: groupId });
         await newMessage.save();
         res.status(201).json({ message: 'Message sent successfully' });
     } catch (error) {
         res.status(500).send(error.message);
     }
 });
+
+// GET /messages/:groupId to retrieve messages for a group
+router.get('/messages/:groupId', authenticate, async (req, res) => {
+    try {
+        const { groupId } = req.params;
+        const messages = await Message.find({ group: groupId }).sort({ timestamp: -1 });
+        res.json({ messages });
+    } catch (error) {
+        res.status(500).send(error.message);
+    }
+});
+
+router.get('/details/:groupId', async (req, res) => {
+    const groupId = req.params.groupId;
+
+
+    const groupMembers = await fetchGroupMembers(groupId);
+    const groupName = await Group.findById(groupId);
+    res.json({ members: groupMembers, name: groupName.name });
+});
+
+const fetchGroupMembers = async (groupId) => {
+    try {
+        // Find the group by its ID and populate the 'members' field with user details
+        const group = await Group.findById(groupId).populate('members.userId', 'username'); // Populate 'username'
+
+
+        if (!group) {
+            throw new Error('Group not found');
+        }
+        // Extract and return the list of members
+        const members = group.members.map((member) => ({
+            id: member._id,
+            username: member.username,
+        }));
+
+        return members;
+    } catch (error) {
+        throw error;
+    }
+}
+
 
 module.exports = router;
 

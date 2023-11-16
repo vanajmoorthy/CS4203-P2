@@ -4,6 +4,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate, BrowserRouter } from 
 import Login from './pages/Login';
 import Register from './pages/Register';
 import GroupManagement from './pages/GroupManagement';
+import GroupChatPage from './pages/GroupChatPage';
+
 
 const App = () => {
   const [userToken, setUserToken] = useState(localStorage.getItem('userToken'));
@@ -81,6 +83,7 @@ const App = () => {
         <Route path="/register" element={isLoggedIn() ? <Navigate to="/groups" /> : <Register onRegister={handleRegister} />} />
         <Route path="/groups" element={isLoggedIn() ? <GroupManagement userId={getUserIdFromToken()} /> : <Navigate to="/login" />} />
         <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
       </Routes>
     </BrowserRouter>
   );

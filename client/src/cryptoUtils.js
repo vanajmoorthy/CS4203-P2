@@ -1,6 +1,8 @@
 
 const dbName = "cryptoKeys";
 const storeName = "keys";
+const baseUrl = "http://localhost:3000";
+
 
 const openDB = () => {
     return new Promise((resolve, reject) => {
@@ -61,6 +63,243 @@ const getPrivateKey = async () => {
     });
 }
 
+const fetchUserPublicKey = async (userId) => {
+    try {
+        const response = await fetch(`${baseUrl}/groups/users/publicKey/${userId}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('userToken')}`,
+            },
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+            return result.publicKey;
+        } else {
+            console.error('Error fetching public key:', result.message);
+        }
+    } catch (error) {
+        console.error('Network error:', error);
+    }
+};
+
+const encryptWithPublicKey = async (data, publicKey) => {
+    try {
+        // Convert PEM encoded public key to CryptoKey
+        const publicKeyBuffer = pemToBuffer(publicKey);
+        const cryptoKey = await window.crypto.subtle.importKey(
+            "spki",
+            publicKeyBuffer,
+            {
+                name: "RSA-OAEP",
+                hash: { name: "SHA-1" },
+            },
+            true,
+            ["encrypt"]
+        );
+
+        // Ensure data is in Uint8Array format
+        let encoded = new TextEncoder().encode(data);
+
+        // Encrypt the data
+        let encrypted = await window.crypto.subtle.encrypt(
+            { name: "RSA-OAEP" },
+            cryptoKey,
+            encoded
+        );
+
+        return bufferToBase64(encrypted);
+    } catch (error) {
+        console.error("Error during encryption:", error);
+        throw error;
+    }
+}
+
+const decryptWithPrivateKey = async (encryptedData, privateKey) => {
+    if (!(privateKey instanceof CryptoKey)) {
+        throw new Error('Expected privateKey to be a CryptoKey');
+    }
+
+    // Ensure privateKey is for decryption
+    if (!privateKey.usages.includes('decrypt')) {
+        throw new Error('Private key does not support decryption');
+    }
+
+    // Convert the encrypted data from Base64 to an ArrayBuffer
+    let encryptedBuffer = base64ToBuffer(encryptedData);
+
+
+    // Decrypt the data
+    let decrypted = await window.crypto.subtle.decrypt(
+        {
+            name: "RSA-OAEP",
+            hash: { name: "SHA-1" },
+        },
+        privateKey,
+        encryptedBuffer
+    );
+    return new TextDecoder().decode(decrypted);
+}
+
+const pemToBuffer = (pem) => {
+    const b64Lines = pem.replace(/-----[A-Z ]+-----/g, '');
+    const b64Prefix = b64Lines.replace(/\n/g, '');
+    return base64ToBuffer(b64Prefix);
+}
+
+const base64ToBuffer = (base64) => {
+    const binaryString = window.atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+const bufferToBase64 = (buffer) => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+const fetchAndDecryptGroupKey = async (groupId, privateKey) => {
+    try {
+        if (!privateKey) {
+            console.error('Admin private key is not available.');
+            return null;
+        }
+
+        const response = await fetch(`${baseUrl}/groups/groupKey/${groupId}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('userToken')}`,
+            },
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            if (!result.encryptedGroupKey) {
+                console.error('Encrypted group key not found in the response.');
+                return null;
+            }
+            try {
+                const decryptedGroupKey = await decryptWithPrivateKey(result.encryptedGroupKey, privateKey);
+                return decryptedGroupKey;
+            } catch (decryptionError) {
+                console.error('Error decrypting group key:', decryptionError);
+                return null;
+            }
+        } else {
+            console.error('Error fetching group key:', result.message);
+            return null;
+        }
+    } catch (error) {
+        console.error('Error in fetchAndDecryptGroupKey:', error);
+        return null;
+    }
+};
+
+const encryptWithAES = async (text, key) => {
+    // Convert the text to a buffer
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+
+    // Convert the key to a CryptoKey object
+    const cryptoKey = await window.crypto.subtle.importKey(
+        "raw",
+        key,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt"]
+    );
+
+    // Generate a random initialization vector (IV)
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+    // Perform the encryption
+    const encrypted = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv },
+        cryptoKey,
+        data
+    );
+
+    // Combine the IV and the encrypted data and return it as a base64-encoded string
+    const combined = new Uint8Array(iv.byteLength + encrypted.byteLength);
+    combined.set(new Uint8Array(iv), 0);
+    combined.set(new Uint8Array(encrypted), iv.byteLength);
+
+    return bufferToBase64(combined);
+};
+
+const decryptWithAES = async (encryptedText, key) => {
+    // Convert the base64-encoded string to a buffer
+    const combined = base64ToBuffer(encryptedText);
+
+    // Extract the IV from the buffer (first 12 bytes, as used in encryptWithAES)
+    const iv = combined.slice(0, 12);
+    const encryptedData = combined.slice(12);
+
+    // Convert the key to a CryptoKey object
+    const cryptoKey = await window.crypto.subtle.importKey(
+        "raw",
+        key,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["decrypt"]
+    );
+
+    // Perform the decryption
+    try {
+        const decrypted = await window.crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: iv },
+            cryptoKey,
+            encryptedData
+        );
+
+        // Convert the decrypted buffer back into a string
+        const decoder = new TextDecoder();
+        return decoder.decode(decrypted);
+    } catch (error) {
+        console.error('Error decrypting message:', error);
+        return null; // or handle error as appropriate
+    }
+};
+
+
+const hexStringToUint8Array = (hexString) => {
+    if (hexString.length % 2 !== 0) throw new Error("Invalid hexString");
+    var arrayBuffer = new Uint8Array(hexString.length / 2);
+    for (var i = 0; i < hexString.length; i += 2) {
+        var byteValue = parseInt(hexString.substr(i, 2), 16);
+        if (isNaN(byteValue)) throw new Error("Invalid hexString");
+        arrayBuffer[i / 2] = byteValue;
+    }
+    return arrayBuffer;
+};
+
+const getUserIdFromToken = () => {
+    const token = localStorage.getItem('userToken');
+    if (!token) return null;
+
+    try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+
+        return JSON.parse(jsonPayload).id; // Adjust depending on the token's payload structure
+    } catch (error) {
+        console.error('Error decoding token:', error);
+        return null;
+    }
+};
+
+
 export {
-    getPrivateKey, openDB, storePrivateKey
+    getPrivateKey, openDB, storePrivateKey, fetchUserPublicKey, encryptWithPublicKey, decryptWithPrivateKey, pemToBuffer, base64ToBuffer, bufferToBase64, fetchAndDecryptGroupKey, encryptWithAES, hexStringToUint8Array, getUserIdFromToken
 }
