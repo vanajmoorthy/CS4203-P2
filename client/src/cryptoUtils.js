@@ -2,6 +2,7 @@
 const dbName = "cryptoKeys";
 const storeName = "keys";
 const baseUrl = "http://localhost:3000";
+import * as forge from 'node-forge'
 
 
 const openDB = () => {
@@ -85,61 +86,30 @@ const fetchUserPublicKey = async (userId) => {
 
 const encryptWithPublicKey = async (data, publicKey) => {
     try {
-        // Convert PEM encoded public key to CryptoKey
-        const publicKeyBuffer = pemToBuffer(publicKey);
-        const cryptoKey = await window.crypto.subtle.importKey(
-            "spki",
-            publicKeyBuffer,
-            {
-                name: "RSA-OAEP",
-                hash: { name: "SHA-1" },
-            },
-            true,
-            ["encrypt"]
-        );
-
-        // Ensure data is in Uint8Array format
-        let encoded = new TextEncoder().encode(data);
-
-        // Encrypt the data
-        let encrypted = await window.crypto.subtle.encrypt(
-            { name: "RSA-OAEP" },
-            cryptoKey,
-            encoded
-        );
-
-        return bufferToBase64(encrypted);
+        const publicKeyObj = forge.pki.publicKeyFromPem(publicKey);
+        const encrypted = publicKeyObj.encrypt(forge.util.encode64(data), "RSA-OAEP");
+        return forge.util.encode64(encrypted);
     } catch (error) {
         console.error("Error during encryption:", error);
         throw error;
     }
-}
+};
+
 
 const decryptWithPrivateKey = async (encryptedData, privateKey) => {
-    if (!(privateKey instanceof CryptoKey)) {
-        throw new Error('Expected privateKey to be a CryptoKey');
+    try {
+        console.log(privateKey)
+        console.log(encryptedData)
+
+        const privateKeyObj = forge.pki.privateKeyFromPem(privateKey);
+        const decrypted = privateKeyObj.decrypt(forge.util.decode64(encryptedData), "RSA-OAEP");
+        return decrypted;
+    } catch (error) {
+        console.error("Error during decryption:", error);
+        throw error;
     }
+};
 
-    // Ensure privateKey is for decryption
-    if (!privateKey.usages.includes('decrypt')) {
-        throw new Error('Private key does not support decryption');
-    }
-
-    // Convert the encrypted data from Base64 to an ArrayBuffer
-    let encryptedBuffer = base64ToBuffer(encryptedData);
-
-
-    // Decrypt the data
-    let decrypted = await window.crypto.subtle.decrypt(
-        {
-            name: "RSA-OAEP",
-            hash: { name: "SHA-1" },
-        },
-        privateKey,
-        encryptedBuffer
-    );
-    return new TextDecoder().decode(decrypted);
-}
 
 const pemToBuffer = (pem) => {
     const b64Lines = pem.replace(/-----[A-Z ]+-----/g, '');
@@ -165,6 +135,14 @@ const bufferToBase64 = (buffer) => {
     return window.btoa(binary);
 }
 
+const binaryStringToArrayBuffer = (binary) => {
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
 const fetchAndDecryptGroupKey = async (groupId, privateKey) => {
     try {
         if (!privateKey) {
@@ -181,6 +159,7 @@ const fetchAndDecryptGroupKey = async (groupId, privateKey) => {
 
         const result = await response.json();
 
+
         if (response.ok) {
             if (!result.encryptedGroupKey) {
                 console.error('Encrypted group key not found in the response.');
@@ -188,6 +167,8 @@ const fetchAndDecryptGroupKey = async (groupId, privateKey) => {
             }
             try {
                 const decryptedGroupKey = await decryptWithPrivateKey(result.encryptedGroupKey, privateKey);
+                console.log(decryptedGroupKey)
+
                 return decryptedGroupKey;
             } catch (decryptionError) {
                 console.error('Error decrypting group key:', decryptionError);
@@ -203,15 +184,18 @@ const fetchAndDecryptGroupKey = async (groupId, privateKey) => {
     }
 };
 
-const encryptWithAES = async (text, key) => {
+const encryptWithAES = async (text, binaryKeyString) => {
+    // Convert binary string to ArrayBuffer
+    const keyBuffer = binaryStringToArrayBuffer(binaryKeyString);
+
     // Convert the text to a buffer
     const encoder = new TextEncoder();
     const data = encoder.encode(text);
 
-    // Convert the key to a CryptoKey object
+    // Import the key to a CryptoKey object
     const cryptoKey = await window.crypto.subtle.importKey(
         "raw",
-        key,
+        keyBuffer,
         { name: "AES-GCM", length: 256 },
         false,
         ["encrypt"]
@@ -235,7 +219,11 @@ const encryptWithAES = async (text, key) => {
     return bufferToBase64(combined);
 };
 
-const decryptWithAES = async (encryptedText, key) => {
+
+const decryptWithAES = async (encryptedText, binaryKeyString) => {
+    // Convert binary string to ArrayBuffer
+    const keyBuffer = binaryStringToArrayBuffer(binaryKeyString);
+
     // Convert the base64-encoded string to a buffer
     const combined = base64ToBuffer(encryptedText);
 
@@ -243,10 +231,10 @@ const decryptWithAES = async (encryptedText, key) => {
     const iv = combined.slice(0, 12);
     const encryptedData = combined.slice(12);
 
-    // Convert the key to a CryptoKey object
+    // Import the key to a CryptoKey object
     const cryptoKey = await window.crypto.subtle.importKey(
         "raw",
-        key,
+        keyBuffer,
         { name: "AES-GCM", length: 256 },
         false,
         ["decrypt"]
@@ -262,6 +250,7 @@ const decryptWithAES = async (encryptedText, key) => {
 
         // Convert the decrypted buffer back into a string
         const decoder = new TextDecoder();
+
         return decoder.decode(decrypted);
     } catch (error) {
         console.error('Error decrypting message:', error);
@@ -301,5 +290,5 @@ const getUserIdFromToken = () => {
 
 
 export {
-    getPrivateKey, openDB, storePrivateKey, fetchUserPublicKey, encryptWithPublicKey, decryptWithPrivateKey, pemToBuffer, base64ToBuffer, bufferToBase64, fetchAndDecryptGroupKey, encryptWithAES, hexStringToUint8Array, getUserIdFromToken
+    getPrivateKey, openDB, storePrivateKey, fetchUserPublicKey, encryptWithPublicKey, binaryStringToArrayBuffer, decryptWithPrivateKey, pemToBuffer, base64ToBuffer, bufferToBase64, fetchAndDecryptGroupKey, encryptWithAES, decryptWithAES, hexStringToUint8Array, getUserIdFromToken
 }

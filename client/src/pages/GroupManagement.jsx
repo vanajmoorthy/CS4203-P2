@@ -12,11 +12,13 @@ const GroupManagement = ({ userId }) => {
     const [selectedGroupId, setSelectedGroupId] = useState(null);
     const [groupKey, setGroupKey] = useState(null);
     const [adminPrivateKey, setAdminPrivateKey] = useState(null);
+    const [memberGroups, setMemberGroups] = useState([]);
 
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchGroups();
+        fetchMemberGroups();
         loadPrivateKey();
     }, []);
 
@@ -54,6 +56,7 @@ const GroupManagement = ({ userId }) => {
         try {
             // Fetch the new user's public key
             const newUserPublicKey = await fetchUserPublicKey(newUserId);
+            console.log(newUserPublicKey)
             if (!newUserPublicKey) {
                 throw new Error("Failed to fetch new user's public key");
             }
@@ -107,6 +110,34 @@ const GroupManagement = ({ userId }) => {
             console.error('Network error:', error);
         }
     };
+
+    const fetchMemberGroups = async () => {
+        try {
+            const response = await fetch(`${baseUrl}/groups/memberGroups`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('userToken')}`,
+                },
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                setMemberGroups(result.groups); // Update the state with the fetched groups
+            } else {
+                console.error('Error fetching member groups:', result.message);
+            }
+        } catch (error) {
+            console.error('Network error:', error);
+        }
+    };
+
+    useEffect(() => {
+        fetchMemberGroups();
+        loadPrivateKey();
+    }, []);
+
+
     const createGroup = async () => {
         event.preventDefault()
 
@@ -136,9 +167,10 @@ const GroupManagement = ({ userId }) => {
     }
 
     const handleLogout = () => {
-        localStorage.removeItem('userToken'); // Clear the token from local storage
-
         navigate('/login'); // Redirect to the login page
+
+        localStorage.removeItem('userToken'); // Clear the token from local storage
+        localStorage.removeItem('userName'); // Clear the token from local storage
     };
 
     const navigateToGroupChat = (groupId) => {
@@ -159,6 +191,15 @@ const GroupManagement = ({ userId }) => {
                 <button type="submit" style={styles.button}>Create Group</button>
             </form>
             <button onClick={handleLogout} style={styles.button}>Logout</button> {/* Logout button */}
+            <h3>Groups as Member</h3>
+            {memberGroups.map(group => (
+                <div key={group._id}>
+                    <h3 onClick={() => navigateToGroupChat(group._id)} >{group.name}</h3>
+
+                </div>
+            ))}
+            <h3>Groups as Admin</h3>
+
             {groups.map(group => (
                 <div key={group._id}>
                     <h3 onClick={() => navigateToGroupChat(group._id)} >{group.name}</h3>
@@ -167,9 +208,11 @@ const GroupManagement = ({ userId }) => {
                         setSelectedGroupId(group._id);
                         const key = await fetchAndDecryptGroupKey(group._id, adminPrivateKey);
                         if (key) {
+                            const encoder = new TextEncoder();
+                            console.log(encoder.encode(key))
                             setGroupKey(key);
                         } else {
-                            // Handle the case where key retrieval failed
+                            console.log("Key could not be fetched")
                         }
                     }}>Select Group</button>
 

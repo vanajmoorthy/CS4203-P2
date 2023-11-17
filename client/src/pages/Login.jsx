@@ -7,7 +7,6 @@ const Login = ({ onLogin }) => {
     const baseUrl = "http://localhost:3000";
 
     const handleLogin = async () => {
-        console.log(username, password);
         try {
             const response = await fetch(`${baseUrl}/auth/login`, {
                 method: 'POST',

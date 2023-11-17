@@ -6,13 +6,13 @@ exports.generateGroupKey = () => {
     return crypto.randomBytes(32).toString('hex'); // 32 bytes for AES-256 key
 };
 
-// Function to encrypt a key with a user's public key
-exports.encryptKey = (key, publicKeyPem) => {
+exports.encryptKey = (data, publicKey) => {
     try {
-        const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
-        const encrypted = publicKey.encrypt(key, 'RSA-OAEP');
+        const publicKeyObj = forge.pki.publicKeyFromPem(publicKey);
+        const encrypted = publicKeyObj.encrypt(forge.util.encode64(data), "RSA-OAEP");
         return forge.util.encode64(encrypted);
     } catch (error) {
-        console.error(error);
+        console.error("Error during encryption:", error);
+        throw error;
     }
 };

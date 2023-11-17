@@ -8,52 +8,7 @@ import GroupChatPage from './pages/GroupChatPage';
 
 
 const App = () => {
-  const [userToken, setUserToken] = useState(localStorage.getItem('userToken'));
 
-
-
-
-  const encryptMessage = (message, secretKey) => {
-    return CryptoJS.AES.encrypt(message, secretKey).toString();
-  };
-
-  const decryptMessage = (ciphertext, secretKey) => {
-    const bytes = CryptoJS.AES.decrypt(ciphertext, secretKey);
-    return bytes.toString(CryptoJS.enc.Utf8);
-  };
-
-  const sendMessage = async (message, groupId) => {
-    const groupKey = getGroupKey(groupId); // Function to retrieve the group's key
-    const encryptedMessage = encryptMessage(message, groupKey);
-
-    // Send the encrypted message to the server
-    const response = await fetch('/api/sendMessage', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${yourAuthToken}` // Include your auth token
-      },
-      body: JSON.stringify({ content: encryptedMessage, groupId })
-    });
-
-    return response.json();
-  };
-
-  const receiveMessage = (encryptedMessage, groupId) => {
-    const groupKey = getGroupKey(groupId);
-    return decryptMessage(encryptedMessage, groupKey);
-  };
-
-
-  const handleLogin = (username, password) => {
-    // ... login logic
-    // On successful login:
-    setUserToken("");
-  };
-
-  const handleRegister = (username, password, publicKey) => {
-    // ... registration logic
-  };
 
 
 
@@ -79,10 +34,10 @@ const App = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={isLoggedIn() ? <Navigate to="/groups" /> : <Login onLogin={handleLogin} />} />
-        <Route path="/register" element={isLoggedIn() ? <Navigate to="/groups" /> : <Register onRegister={handleRegister} />} />
-        <Route path="/groups" element={isLoggedIn() ? <GroupManagement userId={getUserIdFromToken()} /> : <Navigate to="/login" />} />
-        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/login" element={isLoggedIn() ? <Navigate to="/groups" /> : <Login />} />
+        <Route path="/register" element={isLoggedIn() ? <Navigate to="/groups" /> : <Register />} />
+        <Route path="/groups" element={isLoggedIn() ? <GroupManagement userId={getUserIdFromToken()} /> : <Navigate to="/register" />} />
+        <Route path="/" element={<Navigate to="/register" />} />
         <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
       </Routes>
     </BrowserRouter>

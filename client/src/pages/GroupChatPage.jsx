@@ -1,7 +1,7 @@
 // GroupChatPage.js
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { getPrivateKey, encryptWithAES, decryptWithPrivateKey, fetchAndDecryptGroupKey, hexStringToUint8Array, getUserIdFromToken } from '../cryptoUtils';
+import { getPrivateKey, encryptWithAES, decryptWithAES, fetchAndDecryptGroupKey, hexStringToUint8Array, getUserIdFromToken } from '../cryptoUtils';
 
 const GroupChatPage = () => {
     const [messages, setMessages] = useState([]);
@@ -19,20 +19,26 @@ const GroupChatPage = () => {
     }, [groupId]);
 
     useEffect(() => {
-        const fetchKeyAndMessages = async () => {
+        const fetchGroupKey = async () => {
             if (userPrivateKey) {
                 try {
                     const decryptedKey = await fetchAndDecryptGroupKey(groupId, userPrivateKey);
                     setGroupKey(decryptedKey);
-                    fetchMessages(); // Now dependent on userPrivateKey
                 } catch (error) {
                     console.error("Error in fetching and decrypting group key:", error);
                 }
             }
         };
 
-        fetchKeyAndMessages();
+        fetchGroupKey();
     }, [groupId, userPrivateKey]);
+
+    useEffect(() => {
+        if (groupKey) {
+            fetchMessages();
+        }
+    }, [groupKey]); // Dependency on groupKey
+
 
     const loadPrivateKey = async () => {
         try {
@@ -71,6 +77,8 @@ const GroupChatPage = () => {
                 },
             });
             const result = await response.json();
+            console.log(response.ok)
+            console.log(groupKey)
 
             if (response.ok && groupKey) {
                 const decryptedMessages = await Promise.all(
@@ -82,6 +90,8 @@ const GroupChatPage = () => {
                         };
                     })
                 );
+                console.log("lolol")
+                console.log(decryptedMessages)
                 setMessages(decryptedMessages);
             } else {
                 console.error('Error fetching messages:', result.message);
@@ -98,9 +108,7 @@ const GroupChatPage = () => {
                 return;
             }
 
-            const groupKeyArrayBuffer = hexStringToUint8Array(groupKey)
-
-            const encryptedContent = await encryptWithAES(newMessage, groupKeyArrayBuffer);
+            const encryptedContent = await encryptWithAES(newMessage, groupKey);
 
             const userId = getUserIdFromToken();
             if (!userId) {

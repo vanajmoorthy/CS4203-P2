@@ -1,48 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { storePrivateKey } from "../cryptoUtils"
+import * as forge from 'node-forge'
 
 const Register = ({ onRegister }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [publicKey, setPublicKey] = useState('');
     const baseUrl = "http://localhost:3000";
 
     const navigate = useNavigate();
 
-    useEffect(() => {
-        generateKeyPair();
-    }, []);
 
-    const generateKeyPair = async () => {
-        const keyPair = await window.crypto.subtle.generateKey(
-            {
-                name: "RSA-OAEP",
-                modulusLength: 2048,
-                publicExponent: new Uint8Array([1, 0, 1]),
-                hash: "SHA-1",
-            },
-            true,
-            ["encrypt", "decrypt"]
-        );
+    const generateKeyPair = () => {
+        try {
+            const keyPair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
 
-        // Export the public key
-        const exportedPublicKey = await window.crypto.subtle.exportKey(
-            "spki",
-            keyPair.publicKey
-        );
+            // Extract the public key in PEM format
+            const publicKeyPem = forge.pki.publicKeyToPem(keyPair.publicKey);
 
-        // Convert the exported key to Base64 to send to the server
-        const publicKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(exportedPublicKey)));
-        const publicKeyPEM = `-----BEGIN PUBLIC KEY-----\n${publicKeyBase64}\n-----END PUBLIC KEY-----`;
-        setPublicKey(publicKeyPEM);
+            // Extract the private key in PEM format
+            const privateKeyPem = forge.pki.privateKeyToPem(keyPair.privateKey);
 
-        // Store the private key securely
-        await storePrivateKey(keyPair.privateKey);
+            // Store the private key
+            storePrivateKey(privateKeyPem);
+
+            console.log(publicKeyPem)
+            console.log(privateKeyPem)
+
+            return publicKeyPem;
+        } catch (error) {
+            console.error("Error generating key pair:", error);
+        }
     };
 
 
     const handleRegister = async () => {
+        const publicKey = generateKeyPair()
+
+        if (!publicKey) {
+            console.error("Failed to generate public key")
+            return;
+        }
+
+
         try {
             // Registration request
             const registerResponse = await fetch(`${baseUrl}/auth/register`, {
@@ -52,6 +52,7 @@ const Register = ({ onRegister }) => {
                 },
                 body: JSON.stringify({ username, password, publicKey }),
             });
+
 
             const registerData = await registerResponse.json();
             console.log("Registration info: " + registerData.message);
@@ -73,8 +74,10 @@ const Register = ({ onRegister }) => {
                 if (loginResponse.ok) {
                     console.log('Login Success:', loginData);
                     localStorage.setItem('userToken', loginData.token);
+                    localStorage.setItem('userName', loginData.username);
 
-                    navigate('/groups'); // if you are using react-router
+
+                    navigate('/groups');
                 } else {
                     console.error("Error logging in after registration");
                 }
@@ -83,8 +86,6 @@ const Register = ({ onRegister }) => {
             console.error("Error during registration or login: " + error);
         }
     };
-
-
 
     return (
         <div style={styles.form}>

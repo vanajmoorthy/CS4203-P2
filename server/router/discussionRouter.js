@@ -8,21 +8,24 @@ const jwt = require('jsonwebtoken');
 
 
 const authenticate = (req, res, next) => {
-    const token = req.headers.authorization?.split(' ')[1]; // Assuming Bearer token
+    // Extract the token from the Authorization header
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
-    if (!token) {
-        return res.status(401).send({ message: "No token provided" });
+    if (token == null) {
+        return res.status(401).json({ message: "No token provided" });
     }
 
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            // Token verification error
+            return res.status(403).json({ message: "Invalid or expired token" });
+        }
 
-        req.user = decoded; // Set the user in the request
+        // Token is valid
+        req.user = user;
         next();
-    } catch (error) {
-        console.error(error)
-        res.status(401).send({ message: "Invalid token" });
-    }
+    });
 };
 
 router.post('/createGroup', async (req, res) => {
@@ -30,10 +33,12 @@ router.post('/createGroup', async (req, res) => {
         const { groupName, userId } = req.body;
         const groupKey = generateGroupKey(); // Generate a symmetric key for the group
 
+
         // Fetch the public key of the user (group creator)
         const user = await User.findById(userId);
 
         const encryptedGroupKey = encryptKey(groupKey, user.publicKey); // Encrypt the group key with the user's public key
+
         const newGroup = new Group({
             name: groupName,
             admin: userId,
@@ -43,6 +48,7 @@ router.post('/createGroup', async (req, res) => {
                 username: user.username
             }]
         });
+
 
         await newGroup.save();
         res.status(201).json({ message: 'Group created successfully', groupId: newGroup._id });
@@ -54,6 +60,7 @@ router.post('/createGroup', async (req, res) => {
 router.post('/addGroupMember', authenticate, async (req, res) => {
     try {
         const { groupId, newUserId, encryptedGroupKey } = req.body;
+
 
         const group = await Group.findById(groupId);
         if (!group) {
@@ -124,16 +131,41 @@ router.get('/adminGroups', authenticate, async (req, res) => {
     }
 });
 
-// Route to get encrypted group key for the admin
+router.get('/memberGroups', authenticate, async (req, res) => {
+    try {
+        const userId = req.user.id; // Assuming the JWT token contains the user ID
+
+        // Find groups where the user is a member but not an admin
+        const groups = await Group.find({
+            admin: { $ne: userId },
+            'members.userId': userId
+        }).populate('members.userId', 'username');
+
+        res.json({ groups });
+    } catch (error) {
+        console.error('Error fetching member groups:', error);
+        res.status(500).send({ message: error.message });
+    }
+});
+
+// Route to get encrypted group key for the admin or members
 router.get('/groupKey/:groupId', authenticate, async (req, res) => {
     try {
         const { groupId } = req.params;
         const group = await Group.findById(groupId);
-        if (!group || group.admin.toString() !== req.user.id) {
+
+        if (!group) {
+            return res.status(404).json({ message: 'Group not found' });
+        }
+
+        // Check if the user is a member of the group
+        const isMember = group.members.some(member => member.userId.toString() === req.user.id);
+        if (!isMember) {
             return res.status(403).json({ message: 'Unauthorized' });
         }
-        const adminEncryptedKey = group.members.find(member => member.userId.toString() === req.user.id).encryptedGroupKey;
-        res.json({ encryptedGroupKey: adminEncryptedKey });
+
+        const userEncryptedKey = group.members.find(member => member.userId.toString() === req.user.id).encryptedGroupKey;
+        res.json({ encryptedGroupKey: userEncryptedKey });
     } catch (error) {
         res.status(500).send({ message: error.message });
     }
