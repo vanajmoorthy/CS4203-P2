@@ -5,13 +5,11 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import GroupManagement from './pages/GroupManagement';
 import GroupChatPage from './pages/GroupChatPage';
+import Landing from './pages/Landing';
+
 
 
 const App = () => {
-
-
-
-
   const isLoggedIn = () => {
     return localStorage.getItem('userToken') !== null;
   };
@@ -36,8 +34,11 @@ const App = () => {
       <Routes>
         <Route path="/login" element={isLoggedIn() ? <Navigate to="/groups" /> : <Login />} />
         <Route path="/register" element={isLoggedIn() ? <Navigate to="/groups" /> : <Register />} />
-        <Route path="/groups" element={isLoggedIn() ? <GroupManagement userId={getUserIdFromToken()} /> : <Navigate to="/register" />} />
-        <Route path="/" element={<Navigate to="/register" />} />
+        <Route path="/groups" element={isLoggedIn() ? <GroupManagement userId={getUserIdFromToken()} /> : <Navigate to="/landing" />} />
+        <Route path="/landing" element={isLoggedIn() ? <GroupManagement userId={getUserIdFromToken()} /> : <Landing />} />
+
+
+        <Route path="/" element={<Navigate to="/landing" />} />
         <Route path="/group-chat/:groupId" element={<GroupChatPage />} />
       </Routes>
     </BrowserRouter>

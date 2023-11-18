@@ -56,7 +56,6 @@ const GroupManagement = ({ userId }) => {
         try {
             // Fetch the new user's public key
             const newUserPublicKey = await fetchUserPublicKey(newUserId);
-            console.log(newUserPublicKey)
             if (!newUserPublicKey) {
                 throw new Error("Failed to fetch new user's public key");
             }
@@ -167,7 +166,7 @@ const GroupManagement = ({ userId }) => {
     }
 
     const handleLogout = () => {
-        navigate('/login'); // Redirect to the login page
+        window.location = '/login'; // Redirect to the login page
 
         localStorage.removeItem('userToken'); // Clear the token from local storage
         localStorage.removeItem('userName'); // Clear the token from local storage
@@ -178,7 +177,7 @@ const GroupManagement = ({ userId }) => {
     };
 
     return (
-        <div>
+        <div style={styles.container}>
             <form onSubmit={createGroup} style={styles.form}>
                 <input
                     type="text"
@@ -191,34 +190,39 @@ const GroupManagement = ({ userId }) => {
                 <button type="submit" style={styles.button}>Create Group</button>
             </form>
             <button onClick={handleLogout} style={styles.button}>Logout</button> {/* Logout button */}
-            <h3>Groups as Member</h3>
-            {memberGroups.map(group => (
-                <div key={group._id}>
-                    <h3 onClick={() => navigateToGroupChat(group._id)} >{group.name}</h3>
+            <div style={styles.groupsContainer}>
+                <div style={styles.group}>
+                    <h3>Groups as Member</h3>
 
+                    {memberGroups.map(group => (
+                        <div key={group._id}>
+                            <p onClick={() => navigateToGroupChat(group._id)} >{group.name}</p>
+                        </div>
+                    ))}
                 </div>
-            ))}
-            <h3>Groups as Admin</h3>
 
-            {groups.map(group => (
-                <div key={group._id}>
-                    <h3 onClick={() => navigateToGroupChat(group._id)} >{group.name}</h3>
-                    {/* Add a button to select this group */}
-                    <button onClick={async () => {
-                        setSelectedGroupId(group._id);
-                        const key = await fetchAndDecryptGroupKey(group._id, adminPrivateKey);
-                        if (key) {
-                            const encoder = new TextEncoder();
-                            console.log(encoder.encode(key))
-                            setGroupKey(key);
-                        } else {
-                            console.log("Key could not be fetched")
-                        }
-                    }}>Select Group</button>
 
+                <div style={styles.group}>
+                    <h3>Groups as Admin</h3>
+
+                    {groups.map(group => (
+                        <div style={styles.groupItem} key={group._id}>
+                            <p onClick={() => navigateToGroupChat(group._id)} >{group.name}</p>
+                            {/* Add a button to select this group */}
+                            <button onClick={async () => {
+                                setSelectedGroupId(group._id);
+                                const key = await fetchAndDecryptGroupKey(group._id, adminPrivateKey);
+                                if (key) {
+                                    setGroupKey(key);
+                                } else {
+                                    console.log("Key could not be fetched")
+                                }
+                            }}>Select Group</button>
+
+                        </div>
+                    ))}
                 </div>
-            ))}
-
+            </div>
             <div>
                 <input
                     type="text"
@@ -243,6 +247,13 @@ const GroupManagement = ({ userId }) => {
 };
 
 const styles = {
+    container: {
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        width: "100vw"
+    },
     form: {
         margin: '10px',
         padding: '20px',
@@ -258,6 +269,19 @@ const styles = {
         margin: '10px 0',
         padding: '10px',
         width: '200px',
+    },
+    groupsContainer: {
+        display: "flex"
+    },
+    group: {
+        display: "flex",
+        flexDirection: "column",
+        margin: "1rem"
+    },
+    groupItem: {
+        display: "flex",
+        justifyContent: "space-between"
+
     }
 }
 

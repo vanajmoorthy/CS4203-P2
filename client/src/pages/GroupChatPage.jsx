@@ -1,7 +1,7 @@
 // GroupChatPage.js
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { getPrivateKey, encryptWithAES, decryptWithAES, fetchAndDecryptGroupKey, hexStringToUint8Array, getUserIdFromToken } from '../cryptoUtils';
+import { getPrivateKey, encryptWithAES, decryptWithAES, fetchAndDecryptGroupKey, getUserIdFromToken, base64ToBinary, binaryToHex, binaryStringToByteArray, hexStringToUint8Array } from '../cryptoUtils';
 
 const GroupChatPage = () => {
     const [messages, setMessages] = useState([]);
@@ -10,7 +10,7 @@ const GroupChatPage = () => {
     const { groupId } = useParams();
     const [userPrivateKey, setUserPrivateKey] = useState(null);
     const [groupKey, setGroupKey] = useState(null)
-
+    const [groupAdminId, setGroupAdminId] = useState(null);
     const baseUrl = "http://localhost:3000";
 
     useEffect(() => {
@@ -59,12 +59,28 @@ const GroupChatPage = () => {
             const result = await response.json();
             if (response.ok) {
                 setGroupDetails(result);
+                setGroupAdminId(result.admin);
             } else {
                 console.error('Error fetching group members:', result.message);
             }
 
         } catch (error) {
             console.error('Network error:', error);
+        }
+    };
+
+    const fetchUsernameByUserId = async (userId) => {
+        try {
+            const response = await fetch(`${baseUrl}/groups/getUsername/${userId}`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('userToken')}`,
+                },
+            });
+            const data = await response.json()
+            return data.username;
+        } catch (error) {
+            console.error(`Error fetching username for userId ${userId}:`, error);
+            return ''; // Return an empty string in case of an error
         }
     };
 
@@ -77,21 +93,30 @@ const GroupChatPage = () => {
                 },
             });
             const result = await response.json();
-            console.log(response.ok)
-            console.log(groupKey)
 
             if (response.ok && groupKey) {
                 const decryptedMessages = await Promise.all(
                     result.messages.map(async (msg) => {
-                        const decryptedContent = await decryptWithAES(msg.content, groupKey);
+                        const binaryGroupKey = base64ToBinary(groupKey);
+                        const userId = getUserIdFromToken();
+
+                        if (userId == groupAdminId) {
+                            var decryptedContent = await decryptWithAES(msg.content, binaryGroupKey);
+                        } else {
+                            var decryptedContent = await decryptWithAES(msg.content, base64ToBinary(base64ToBinary(groupKey)));
+
+                        }
+
+                        // Fetch the sender's username using the userId
+                        const senderUsername = await fetchUsernameByUserId(msg.sender);
+
                         return {
                             ...msg,
                             content: decryptedContent,
+                            sender: senderUsername, // Update sender with the username
                         };
                     })
                 );
-                console.log("lolol")
-                console.log(decryptedMessages)
                 setMessages(decryptedMessages);
             } else {
                 console.error('Error fetching messages:', result.message);
@@ -108,9 +133,16 @@ const GroupChatPage = () => {
                 return;
             }
 
-            const encryptedContent = await encryptWithAES(newMessage, groupKey);
+            const binaryGroupKey = base64ToBinary(groupKey);
 
             const userId = getUserIdFromToken();
+
+            if (userId == groupAdminId) {
+                var encryptedContent = await encryptWithAES(newMessage, binaryGroupKey);
+            } else {
+                var encryptedContent = await encryptWithAES(newMessage, base64ToBinary(binaryGroupKey));
+            }
+
             if (!userId) {
                 console.error("User ID is not available.");
                 return;
@@ -140,9 +172,14 @@ const GroupChatPage = () => {
         }
     };
 
+    const formatTimestamp = (timestamp) => {
+        const date = new Date(timestamp);
+        return date.toLocaleString(); // Formats the date and time according to the user's locale
+    }
+
 
     return (
-        <div>
+        <div style={styles.container}>
             <h2>Group Chat - {groupDetails.name}</h2>
 
             <div>
@@ -156,7 +193,13 @@ const GroupChatPage = () => {
 
             <div>
                 {messages.map((message, index) => (
-                    <div key={index}>{message.content}</div> // Display decrypted messages
+                    <div style={styles.message} key={index}>
+                        <div>
+                            <strong>{message.sender}</strong> {/* Display sender username */}
+                        </div>
+                        <div>{message.content}</div> {/* Display decrypted message content */}
+                        <div>{formatTimestamp(message.timestamp)}</div> {/* Display message timestamp */}
+                    </div>
                 ))}
             </div>
 
@@ -170,5 +213,18 @@ const GroupChatPage = () => {
         </div>
     );
 };
+
+const styles = {
+    message: {
+        backgroundColor: "rgb(225 225 225)",
+        margin: "1rem 0",
+    },
+    container: {
+        display: "flex",
+        flexDirection: "column",
+        width: "100vw",
+        margin: "1rem"
+    }
+}
 
 export default GroupChatPage;

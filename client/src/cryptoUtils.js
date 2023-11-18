@@ -4,6 +4,20 @@ const storeName = "keys";
 const baseUrl = "http://localhost:3000";
 import * as forge from 'node-forge'
 
+const generateGroupKey = async () => {
+    try {
+        const randomBytes = new Uint8Array(32);
+        await window.crypto.getRandomValues(randomBytes);
+        const hexString = Array.from(randomBytes)
+            .map(byte => byte.toString(16).padStart(2, '0'))
+            .join('');
+        return hexString;
+    } catch (error) {
+        // Handle any errors that might occur while generating random bytes.
+        console.error('Error generating random bytes:', error);
+        return null;
+    }
+}
 
 const openDB = () => {
     return new Promise((resolve, reject) => {
@@ -98,8 +112,6 @@ const encryptWithPublicKey = async (data, publicKey) => {
 
 const decryptWithPrivateKey = async (encryptedData, privateKey) => {
     try {
-        console.log(privateKey)
-        console.log(encryptedData)
 
         const privateKeyObj = forge.pki.privateKeyFromPem(privateKey);
         const decrypted = privateKeyObj.decrypt(forge.util.decode64(encryptedData), "RSA-OAEP");
@@ -135,13 +147,26 @@ const bufferToBase64 = (buffer) => {
     return window.btoa(binary);
 }
 
-const binaryStringToArrayBuffer = (binary) => {
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
+
+const binaryStringToByteArray = (binaryString) => {
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
     }
-    return bytes.buffer;
-}
+    return bytes;
+};
+
+const base64ToBinary = (base64) => {
+    const binaryString = window.atob(base64);
+    return binaryString;
+};
+
+const binaryToHex = (binary) => {
+    return Array.from(binary).map(byte => {
+        return ('0' + byte.charCodeAt(0).toString(16)).slice(-2);
+    }).join('');
+};
+
 
 const fetchAndDecryptGroupKey = async (groupId, privateKey) => {
     try {
@@ -167,7 +192,6 @@ const fetchAndDecryptGroupKey = async (groupId, privateKey) => {
             }
             try {
                 const decryptedGroupKey = await decryptWithPrivateKey(result.encryptedGroupKey, privateKey);
-                console.log(decryptedGroupKey)
 
                 return decryptedGroupKey;
             } catch (decryptionError) {
@@ -184,22 +208,24 @@ const fetchAndDecryptGroupKey = async (groupId, privateKey) => {
     }
 };
 
-const encryptWithAES = async (text, binaryKeyString) => {
-    // Convert binary string to ArrayBuffer
-    const keyBuffer = binaryStringToArrayBuffer(binaryKeyString);
 
-    // Convert the text to a buffer
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
+const encryptWithAES = async (text, binaryKeyString) => {
+    // Convert hex string to Uint8Array
+    const keyByteArray = hexStringToUint8Array(binaryKeyString);
+
 
     // Import the key to a CryptoKey object
     const cryptoKey = await window.crypto.subtle.importKey(
         "raw",
-        keyBuffer,
+        keyByteArray,
         { name: "AES-GCM", length: 256 },
         false,
         ["encrypt"]
     );
+
+    // Convert the text to a buffer
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
 
     // Generate a random initialization vector (IV)
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
@@ -222,7 +248,7 @@ const encryptWithAES = async (text, binaryKeyString) => {
 
 const decryptWithAES = async (encryptedText, binaryKeyString) => {
     // Convert binary string to ArrayBuffer
-    const keyBuffer = binaryStringToArrayBuffer(binaryKeyString);
+    const keyBuffer = hexStringToUint8Array(binaryKeyString);
 
     // Convert the base64-encoded string to a buffer
     const combined = base64ToBuffer(encryptedText);
@@ -258,16 +284,12 @@ const decryptWithAES = async (encryptedText, binaryKeyString) => {
     }
 };
 
-
 const hexStringToUint8Array = (hexString) => {
-    if (hexString.length % 2 !== 0) throw new Error("Invalid hexString");
-    var arrayBuffer = new Uint8Array(hexString.length / 2);
-    for (var i = 0; i < hexString.length; i += 2) {
-        var byteValue = parseInt(hexString.substr(i, 2), 16);
-        if (isNaN(byteValue)) throw new Error("Invalid hexString");
-        arrayBuffer[i / 2] = byteValue;
+    const bytes = new Uint8Array(hexString.length / 2);
+    for (let i = 0; i < hexString.length; i += 2) {
+        bytes[i / 2] = parseInt(hexString.substring(i, i + 2), 16);
     }
-    return arrayBuffer;
+    return bytes;
 };
 
 const getUserIdFromToken = () => {
@@ -288,7 +310,16 @@ const getUserIdFromToken = () => {
     }
 };
 
+const base64ToUint8Array = (base64) => {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+};
 
 export {
-    getPrivateKey, openDB, storePrivateKey, fetchUserPublicKey, encryptWithPublicKey, binaryStringToArrayBuffer, decryptWithPrivateKey, pemToBuffer, base64ToBuffer, bufferToBase64, fetchAndDecryptGroupKey, encryptWithAES, decryptWithAES, hexStringToUint8Array, getUserIdFromToken
+    getPrivateKey, base64ToBinary, binaryToHex, generateGroupKey, openDB, storePrivateKey, fetchUserPublicKey, encryptWithPublicKey, binaryStringToByteArray, decryptWithPrivateKey, pemToBuffer, base64ToBuffer, bufferToBase64, fetchAndDecryptGroupKey, encryptWithAES, decryptWithAES, hexStringToUint8Array, getUserIdFromToken
 }

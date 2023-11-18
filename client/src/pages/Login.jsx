@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 const Login = ({ onLogin }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const baseUrl = "http://localhost:3000";
+    const [errorMessage, setErrorMessage] = useState('');
 
     const handleLogin = async () => {
         try {
@@ -27,40 +27,53 @@ const Login = ({ onLogin }) => {
                 if (onLogin) {
                     onLogin(username, password);
                 }
+                window.location = "/groups"
 
             } else {
                 // Handle login failure
+                setErrorMessage(data.message || 'Unknown error');
                 console.error('Login failed:', data.message || 'Unknown error');
             }
         } catch (error) {
+            setErrorMessage("Error logging in: " + error);
             console.error("Error logging in: " + error);
         }
     };
 
 
     return (
-        <div style={styles.form}>
-            <h2>Login</h2>
-            <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username"
-                style={styles.input}
-            />
-            <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
-                style={styles.input}
-            />
-            <button onClick={handleLogin} style={styles.button}>Login</button>
+        <div style={styles.container}>
+            <div style={styles.form}>
+                <h2>Login</h2>
+                {errorMessage && <div style={styles.error}>{errorMessage}</div>} {/* Display the error message */}
+
+                <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Username"
+                    style={styles.input}
+                />
+                <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password"
+                    style={styles.input}
+                />
+                <button onClick={handleLogin} style={styles.button}>Login</button>
+            </div>
         </div>
     );
 };
 
 const styles = {
+    container: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "100vw"
+    },
     form: {
         margin: '10px',
         padding: '20px',

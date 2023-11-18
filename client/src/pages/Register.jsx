@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { storePrivateKey } from "../cryptoUtils"
 import * as forge from 'node-forge'
 
 const Register = ({ onRegister }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [errorMessage, setErrorMessage] = useState('');
     const baseUrl = "http://localhost:3000";
-
-    const navigate = useNavigate();
-
 
     const generateKeyPair = () => {
         try {
@@ -24,24 +22,39 @@ const Register = ({ onRegister }) => {
             // Store the private key
             storePrivateKey(privateKeyPem);
 
-            console.log(publicKeyPem)
-            console.log(privateKeyPem)
-
             return publicKeyPem;
         } catch (error) {
             console.error("Error generating key pair:", error);
         }
     };
 
+    const isPasswordStrong = (password) => {
+        // Implement password strength check here
+        return password.length >= 8 && /\d/.test(password) && /[A-Z]/.test(password);
+    };
 
     const handleRegister = async () => {
+        if (!username || !password || !confirmPassword) {
+            setErrorMessage("Please fill in all fields.");
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            setErrorMessage("Passwords do not match.");
+            return;
+        }
+
+        if (!isPasswordStrong(password)) {
+            setErrorMessage("Password is not strong enough.");
+            return;
+        }
+
         const publicKey = generateKeyPair()
 
         if (!publicKey) {
             console.error("Failed to generate public key")
             return;
         }
-
 
         try {
             // Registration request
@@ -53,6 +66,10 @@ const Register = ({ onRegister }) => {
                 body: JSON.stringify({ username, password, publicKey }),
             });
 
+            if (!registerResponse.ok) {
+                setErrorMessage(registerData.message || "Registration failed.");
+                return;
+            }
 
             const registerData = await registerResponse.json();
             console.log("Registration info: " + registerData.message);
@@ -76,8 +93,8 @@ const Register = ({ onRegister }) => {
                     localStorage.setItem('userToken', loginData.token);
                     localStorage.setItem('userName', loginData.username);
 
+                    window.location = "/groups"
 
-                    navigate('/groups');
                 } else {
                     console.error("Error logging in after registration");
                 }
@@ -88,28 +105,44 @@ const Register = ({ onRegister }) => {
     };
 
     return (
-        <div style={styles.form}>
-            <h2>Register</h2>
-            <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username"
-                style={styles.input}
-            />
-            <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
-                style={styles.input}
-            />
-            <button onClick={handleRegister} style={styles.button}>Register</button>
+        <div style={styles.container}>
+            <div style={styles.form}>
+                <h2>Register</h2>
+                {errorMessage && <p style={styles.error}>{errorMessage}</p>}
+                <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Username"
+                    style={styles.input}
+                />
+                <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password"
+                    style={styles.input}
+                />
+                <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm Password"
+                    style={styles.input}
+                />
+                <button onClick={handleRegister} style={styles.button}>Register</button>
+            </div>
         </div>
     );
 };
 
 const styles = {
+    container: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "100vw"
+    },
     form: {
         margin: '10px',
         padding: '20px',
